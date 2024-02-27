@@ -1,0 +1,242 @@
+---
+title: "Regression Code Templates"
+output: html_document
+date: "2024-01-08"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(broom)
+```
+
+## Data
+National Health and Nutrition Examination Survey is conducted by the National Center for Health Statistics (NCHS). The goal is to "assess the health and nutritional status of adults and children in the United States".
+
+```{r}
+library(NHANES)
+data(NHANES)
+```
+
+## Preprocessing data before regression analysis
+
+1. Check missingness
+
+```{r}
+NHANES %>% drop_na(HealthGen)
+```
+
+2. Ensure variables are the right type
+
+## Simple Linear Regression:
+
+```{r}
+ggplot(data = NHANES, mapping = aes(x = TotChol, y = BPSys1)) +
+  geom_point() +
+  labs(x = "Total Cholestrol", y = "Systolic BP") + 
+  theme_bw()
+```
+
+
+```{r}
+# fitting the model
+slr <- lm(BPSys1 ~ TotChol, data = NHANES)
+
+# showing regression output option 1, the * indicate statistical significance
+summary(slr)
+
+# showing regression output option 2, can automatically generate confidence intervals, 95% by default.
+tidy(slr, conf.int = TRUE)
+```
+
+**Hypothesis testing**: 
+- Formula: Systolic BP = 103.0146 + 3.32 Total Cholesterol
+- Each coefficient is a hypothesis test (t-test)
+  - Standard error = standard deviation / sqrt (n)
+  - T-test statistics = (Estimated value - hypothesized value) / standard error = Estimated value / standard error
+  - P-value = the probability of observing a t-test that's bigger or equal to than this value given the null hypothesis is true
+  - Confidence interval = [Estimated value -1.96*standard error; Estimated value + 1.96* standard error
+- Note: If the sample size is large enough, the test will likely result in rejecting (e.g. > 1000 patients). Consider the practical significance of the result not just the statistical significance. If the sample size is small, there may not be enough evidence to reject
+
+**Interpretation**: 
+- Slope: For every one point increase in total cholesterol, we expect the systolic blood pressure to increase by 3.32 points, on average.
+- Intercept: If the total cholesterol is 0, we expect the systolic blood pressure to be 103.014.
+  - Only interpret the interpret if 1) the predictor can feasibly take values equal to or near zero; 2) 5here are values near zero in the data
+
+
+## Multiple Linear Regression (adjusting for confoundings!)
+
+```{r}
+# converting a categorical variable to the right type before fitting the model
+NHANES <- NHANES %>%
+  mutate(Gender = as.factor(Gender))
+
+mlr <- lm(BPSys1 ~ TotChol + Age + Gender + SleepHrsNight, data = NHANES)
+
+tidy(mlr, conf.int = TRUE)
+```
+
+**Interpretation**: 
+- For every one point increase in total cholesterol, we expect the systolic blood pressure to increase by 0.96, on average, holding all other predictor variables constant.
+- Compared to females, males on average have 4.52mmHg higher systolic blood pressure, holding all other predictor variables constant.
+
+**Comparing models**: 
+
+R-squared = variance explained by the model / total variance
+
+```{r}
+summary(mlr)$r.squared 
+```
+
+```{r}
+mlr2 <- lm(BPSys1 ~ TotChol + Age + Gender + SleepHrsNight + Work + Weight + Height + Pulse, data = NHANES)
+summary(mlr2)$r.squared
+summary(mlr2)$adj.r.squared
+```
+
+R2 will always increase as we add more variables to the model. Adjusted R2: measure that includes a penalty for unnecessary predictor variables. 
+
+**Interaction terms**:
+
+```{r}
+mlr <- lm(BPSys1 ~ TotChol + Gender + TotChol*Gender, data = NHANES)
+
+tidy(mlr, conf.int = TRUE)
+```
+
+
+**Interpretation**:
+- The effect of total cholesterol on systolic BP differs by -1.712 when the patient is male compared to when the patient is female, holding all else constant.
+- If the patient is female, we expect the systolic BP to increase by 4.33 for each point increase in total cholesterol, holding all else constant. If the patient is male, we expect the total cholesterol to increase by 2.62 (=4.33 - 1.71) for each point increase in total cholesterol, holding all else constant.
+- Note: 1) when adding interaction terms, always make sure the main effect is in the model. 2) don't do >2 way interactions because they are very hard to interpret
+
+## Logistic Regression 
+
+```{r}
+NHANES <- NHANES %>%
+  mutate(Diabetes = as.factor(Diabetes))
+
+# fitting the model
+lr <- glm(Diabetes ~ Age + Gender + BMI + Pulse + TotChol , data = NHANES, family = "binomial")
+
+# showing regression output
+# for logistic regression, this shows the **un-exponentiated** output (log odds ratio)
+tidy(lr, conf.int = TRUE)
+
+# for logistic regression, this shows the **exponentiated** output (odds ratio)
+tidy(lr, exponentiate = TRUE, conf.int = TRUE)
+```
+
+**Formulation of logistic regression**: 
+- Odds and probability
+
+**Interpretation**: 
+- For each additional points on BMI, the odds of having diabetes are expected to multiply by a factor of 1.09 (exp(0.073)), holding all else constant.
+- The odds of having diabetes for those who are male is expected to be 1.36 (exp(0.31)) times the odds for female patients, holding all else constant. 
+
+## Multinomial logistic Regression: 
+
+```{r}
+library(nnet) # package for multinomial logistic regression
+
+NHANES %>% count(HealthGen)
+```
+
+```{r}
+NHANES <- NHANES %>% mutate(HealthGen = as.factor(HealthGen), 
+                            PhysActive = as.factor(PhysActive))
+
+```
+
+```{r}
+health_m <- multinom(HealthGen ~ Age + PhysActive, 
+                     data = NHANES)
+
+tidy(health_m, conf.int = TRUE, exponentiate = TRUE)
+```
+
+### Interpretation
+
+The baseline category for the model is Excellent.
+
+For each additional year in age, the odds a person rates themselves as having fair health versus excellent health are expected to multiply by 1.003 (exp(0.003)), holding physical activity constant.
+
+The odds a person who does physical activity will rate themselves as having fair health versus excellent health are expected to be 0.193 (exp(-1.645 )) times the odds for a person who doesn't do physical activity, holding age constant.
+
+### Changing the baseline level
+
+```{r}
+NHANES <- NHANES %>% 
+  mutate(HealthGen = fct_relevel(HealthGen, 
+                               c("Poor","Fair","Good", "Vgood", "Excellent")))
+
+health_m <- multinom(HealthGen ~ Age + PhysActive, 
+                     data = NHANES)
+
+tidy(health_m, conf.int = TRUE, exponentiate = TRUE)
+```
+
+## Poisson Regression 
+
+```{r}
+Poisson_r <- glm(SleepHrsNight ~ Age + Gender, data = NHANES, family = "poisson")
+
+# Print the summary of the Poisson regression model
+summary(Poisson_r)
+```
+
+For each additional year older the head of the household is, we expect the mean number in the house to multiply by a factor of 0.995 (exp(-0.0047)).
+
+## Ordinal Regression
+
+```{r}
+library(MASS)
+
+ordinal_reg <- polr(HealthGen ~ Age + PhysActive, 
+                     data = NHANES)
+
+tidy(ordinal_reg, conf.int = TRUE, exponentiate = TRUE)
+```
+
+## Kaplan Meier Survival Curve Analysis
+
+https://bioconnector.github.io/workshops/r-survival.html
+
+```{r}
+```
+
+
+## Cox Proportional Hazards Regression
+
+```{r}
+
+```
+
+
+## Summary
+- Use the right type of model for the right type of data
+- Ensure the variable is encoded properly prior to passing into R
+- Focus on the interpretations of the variables
+
+**Checking the assumption for your regression models**: 
+- 1. Linearity: There is a linear relationship between the response and predictor variable.
+- 2. Constant Variance: The variability of the errors is equal for all values of the predictor variable.
+- 3. Normality: The errors follow a normal distribution.
+- 4. Independence: The errors are independent from each other.
+
+
+## Other topics
+- Data cleaning in R 
+- Machine learning
+- Github
+- Figure making
+- R
+- Python
+
+## Reference: 
+https://cran.r-project.org/web/packages/NHANES/NHANES.pdf
+https://sta210-fa20.netlify.app
+
+
+
+
