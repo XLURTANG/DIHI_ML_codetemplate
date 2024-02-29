@@ -712,8 +712,8 @@ health_m &lt;- multinom(HealthGen ~ Age + PhysActive,
 ## 11 Excellent Age           0.980   0.00448     -4.55 5.34e- 6    0.971     0.988
 ## 12 Excellent PhysActiv…   14.3     0.228       11.7  1.96e-31    9.15     22.4</code></pre>
 </div>
-<div id="ordinal-regression" class="section level2">
-<h2>Ordinal Regression</h2>
+<div id="ordinal-regression-proportional-odds-model" class="section level2">
+<h2>Ordinal Regression (Proportional odds model)</h2>
 <pre class="r"><code>library(MASS)</code></pre>
 <pre><code>## 
 ## Attaching package: &#39;MASS&#39;</code></pre>
@@ -737,6 +737,12 @@ tidy(ordinal_reg, conf.int = TRUE, exponentiate = TRUE)</code></pre>
 ## 4 Fair|Good         0.272    0.0665     -19.6    NA        NA     scale      
 ## 5 Good|Vgood        1.96     0.0648      10.4    NA        NA     scale      
 ## 6 Vgood|Excellent  13.0      0.0719      35.7    NA        NA     scale</code></pre>
+<p>Note:</p>
+<ul>
+<li>A coefficient taking on a <strong>negative</strong> value means it
+increases the odds of being <strong>less than or equal to</strong> class
+J.</li>
+</ul>
 </div>
 <div id="poisson-regression" class="section level2">
 <h2>Poisson Regression</h2>

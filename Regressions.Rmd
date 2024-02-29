@@ -282,7 +282,7 @@ health_m <- multinom(HealthGen ~ Age + PhysActive,
 tidy(health_m, conf.int = TRUE, exponentiate = TRUE)
 ```
 
-## Ordinal Regression
+## Ordinal Regression (Proportional odds model)
 
 ```{r}
 library(MASS)
@@ -291,6 +291,10 @@ ordinal_reg <- polr(HealthGen ~ Age + PhysActive, data = NHANES)
 
 tidy(ordinal_reg, conf.int = TRUE, exponentiate = TRUE)
 ```
+
+Note:
+
+- A coefficient taking on a **negative** value means it increases the odds of being **less than or equal to** class J. 
 
 ## Poisson Regression 
 
