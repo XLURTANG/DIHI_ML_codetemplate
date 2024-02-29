@@ -1,16 +1,61 @@
 ---
 title: "Regression Code Templates"
 output: html_document
-date: "2024-01-08"
+date: "2024-02-29"
 ---
 
-```{r setup, include=FALSE}
+```{r setup}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(broom)
+library(patchwork)
+```
+
+```{r, include=FALSE}
+diag_plot <- function(model) {
+  
+  model_aug <- augment(model) %>%
+    mutate(obs_num = row_number())
+  
+  resid_fitted <- ggplot(data = model_aug, aes(x = .fitted, y = .std.resid)) +
+    geom_point(alpha = 0.7) +
+    #geom_hline(yintercept = c(-2, 2), color = "blue", lty = 2) +
+    geom_hline(yintercept = c(-3, 3), color = "red", lty = 3) +
+    labs(x = "Predicted values",
+         y = "Standardized Residual",
+         title = "Fitted vs. Standardized Residual") +
+    theme(plot.title = element_text(size = 8),
+          axis.title = element_text(size = 6),
+          axis.text = element_text(size = 5))
+  
+  resid_qq <- ggplot(data = model, aes(sample = .resid)) +
+  stat_qq() + 
+  stat_qq_line() +
+  labs(title = "Normal Quantile plot of residuals", 
+       x = "Theoretical Quantiles", y = "Sample Quantiles") + 
+    theme(plot.title = element_text(size = 8), 
+          axis.title = element_text(size = 6), 
+          axis.text = element_text(size = 5))
+  
+  cook <- ggplot(data = model_aug, aes(x = obs_num, y = .cooksd)) + 
+    geom_point(alpha = 0.7) + 
+    geom_hline(yintercept = 0.5, color = "blue", lty = 2) +
+    geom_hline(yintercept = 1, color = "red", lty = 3) +
+    labs(x = "Observation Number", y = "Cook's distance") +
+    geom_text(aes(label = ifelse(.hat > 1,
+                               as.character(obs_num), "")), nudge_x = 4) + 
+    labs(title = "Observation number vs. Cook's distance") + 
+    theme(plot.title = element_text(size = 8), 
+          axis.title = element_text(size = 6), 
+          axis.text = element_text(size = 5))
+  
+  resid_fitted / (resid_qq + cook) + 
+    plot_annotation(tag_levels = 'A') & theme(plot.tag = element_text(size = 8))
+}
 ```
 
 ## Data
+
 National Health and Nutrition Examination Survey is conducted by the National Center for Health Statistics (NCHS). The goal is to "assess the health and nutritional status of adults and children in the United States".
 
 ```{r}
@@ -23,20 +68,23 @@ data(NHANES)
 1. Check missingness
 
 ```{r}
-NHANES %>% drop_na(HealthGen)
+NHANES %>% drop_na(HealthGen) %>% head(5)
 ```
 
 2. Ensure variables are the right type
 
+```{r}
+#sapply(NHANES, class)
+```
+
 ## Simple Linear Regression:
 
 ```{r}
-ggplot(data = NHANES, mapping = aes(x = TotChol, y = BPSys1)) +
+ggplot(data = NHANES, mapping = aes(x =TotChol, y = BPSys1)) +
   geom_point() +
   labs(x = "Total Cholestrol", y = "Systolic BP") + 
   theme_bw()
 ```
-
 
 ```{r}
 # fitting the model
@@ -50,35 +98,65 @@ tidy(slr, conf.int = TRUE)
 ```
 
 **Hypothesis testing**: 
+
 - Formula: Systolic BP = 103.0146 + 3.32 Total Cholesterol
+
 - Each coefficient is a hypothesis test (t-test)
-  - Standard error = standard deviation / sqrt (n)
+
+  - Standard error = standard deviation / sqrt(n)
+  
   - T-test statistics = (Estimated value - hypothesized value) / standard error = Estimated value / standard error
+  
   - P-value = the probability of observing a t-test that's bigger or equal to than this value given the null hypothesis is true
-  - Confidence interval = [Estimated value -1.96*standard error; Estimated value + 1.96* standard error
+  
+  - Confidence interval = [Estimated value -1.96 x standard error; Estimated value + 1.96 x standard error]
+  
 - Note: If the sample size is large enough, the test will likely result in rejecting (e.g. > 1000 patients). Consider the practical significance of the result not just the statistical significance. If the sample size is small, there may not be enough evidence to reject
 
+
 **Interpretation**: 
+
 - Slope: For every one point increase in total cholesterol, we expect the systolic blood pressure to increase by 3.32 points, on average.
+
 - Intercept: If the total cholesterol is 0, we expect the systolic blood pressure to be 103.014.
-  - Only interpret the interpret if 1) the predictor can feasibly take values equal to or near zero; 2) 5here are values near zero in the data
+
+  - Only interpret the interpret if 1) the predictor can feasibly take values equal to or near zero; 2) There are values near zero in the data
+  
+
+**Checking the assumption for your regression models**: 
+
+- 1. Linearity: There is a linear relationship between the response and predictor variable.
+
+- 2. Constant Variance: The variability of the errors is equal for all values of the predictor variable.
+
+- 3. Normality: The errors follow a normal distribution.
+
+- 4. Independence: The errors are independent from each other.
+
+```{r}
+diag_plot(slr)
+```
 
 
-## Multiple Linear Regression (adjusting for confoundings!)
+
+## Multiple Linear Regression - adjusting for confoundings! :)
 
 ```{r}
 # converting a categorical variable to the right type before fitting the model
 NHANES <- NHANES %>%
   mutate(Gender = as.factor(Gender))
 
+# fitting the model
 mlr <- lm(BPSys1 ~ TotChol + Age + Gender + SleepHrsNight, data = NHANES)
 
 tidy(mlr, conf.int = TRUE)
 ```
 
 **Interpretation**: 
-- For every one point increase in total cholesterol, we expect the systolic blood pressure to increase by 0.96, on average, holding all other predictor variables constant.
-- Compared to females, males on average have 4.52mmHg higher systolic blood pressure, holding all other predictor variables constant.
+
+- Numerical variables: for every mg/dL increase in total cholesterol, we expect the systolic blood pressure to increase by 0.96, on average, **holding all other predictor variables constant**.
+
+- Categorical variables: compared to females, males on average have 4.52mmHg higher systolic blood pressure, holding all other predictor variables constant.
 
 **Comparing models**: 
 
@@ -96,7 +174,16 @@ summary(mlr2)$adj.r.squared
 
 R2 will always increase as we add more variables to the model. Adjusted R2: measure that includes a penalty for unnecessary predictor variables. 
 
+Alternatively, you can use AIC or BIC. The AIC and BIC values themselves are not meaningful, but you can use them to compare models. 
+
+```{r}
+glance(mlr) %>% 
+  dplyr::select(AIC, BIC)
+```
+
 **Interaction terms**:
+
+Question of itnerest: Does the association between total cholestrol and SBP varies based on the patient's gender?
 
 ```{r}
 mlr <- lm(BPSys1 ~ TotChol + Gender + TotChol*Gender, data = NHANES)
@@ -106,18 +193,38 @@ tidy(mlr, conf.int = TRUE)
 
 
 **Interpretation**:
+
 - The effect of total cholesterol on systolic BP differs by -1.712 when the patient is male compared to when the patient is female, holding all else constant.
-- If the patient is female, we expect the systolic BP to increase by 4.33 for each point increase in total cholesterol, holding all else constant. If the patient is male, we expect the total cholesterol to increase by 2.62 (=4.33 - 1.71) for each point increase in total cholesterol, holding all else constant.
-- Note: 1) when adding interaction terms, always make sure the main effect is in the model. 2) don't do >2 way interactions because they are very hard to interpret
+
+- If the patient is female, we expect the systolic BP to increase by 4.33 for each point increase in total cholesterol, holding all else constant. If the patient is male, we expect the total cholesterol to increase by 2.62 (= 4.33 - 1.71) for each point increase in total cholesterol, holding all else constant.
+
+- Note: 
+
+  - 1) when adding interaction terms, always make sure the main effect is in the model.
+  
+  - 2) don't do >2 way interactions because they are very hard to interpret.
 
 ## Logistic Regression 
 
+**Formulation of logistic regression**: 
+
+$$
+Log(\frac{p}{1-p}) = mx+b
+$$
+
+Note: 
+
+- $p$ is the probability and $\frac{p}{1-p}$ is the odds 
+
+- logs here means natural log 
+
 ```{r}
+# make sure the outcome is binary (factor)
 NHANES <- NHANES %>%
   mutate(Diabetes = as.factor(Diabetes))
 
 # fitting the model
-lr <- glm(Diabetes ~ Age + Gender + BMI + Pulse + TotChol , data = NHANES, family = "binomial")
+lr <- glm(Diabetes ~ Gender + BMI + TotChol, data = NHANES, family = "binomial")
 
 # showing regression output
 # for logistic regression, this shows the **un-exponentiated** output (log odds ratio)
@@ -127,12 +234,11 @@ tidy(lr, conf.int = TRUE)
 tidy(lr, exponentiate = TRUE, conf.int = TRUE)
 ```
 
-**Formulation of logistic regression**: 
-- Odds and probability
-
 **Interpretation**: 
-- For each additional points on BMI, the odds of having diabetes are expected to multiply by a factor of 1.09 (exp(0.073)), holding all else constant.
-- The odds of having diabetes for those who are male is expected to be 1.36 (exp(0.31)) times the odds for female patients, holding all else constant. 
+
+- For each additional points on BMI, the odds of having diabetes are expected to **multiply** by a factor of 1.09 (exp(0.094)), holding all else constant.
+
+- The odds of having diabetes for those who are male is expected to be 1.27 (exp(0.24)) times the odds for female patients, holding all else constant. 
 
 ## Multinomial logistic Regression: 
 
@@ -145,7 +251,6 @@ NHANES %>% count(HealthGen)
 ```{r}
 NHANES <- NHANES %>% mutate(HealthGen = as.factor(HealthGen), 
                             PhysActive = as.factor(PhysActive))
-
 ```
 
 ```{r}
@@ -155,15 +260,15 @@ health_m <- multinom(HealthGen ~ Age + PhysActive,
 tidy(health_m, conf.int = TRUE, exponentiate = TRUE)
 ```
 
-### Interpretation
+**Interpretation**: 
 
-The baseline category for the model is Excellent.
+- The baseline category for the model is Excellent.
 
-For each additional year in age, the odds a person rates themselves as having fair health versus excellent health are expected to multiply by 1.003 (exp(0.003)), holding physical activity constant.
+- For each additional year in age, the odds a person rates themselves as having fair health versus excellent health are expected to multiply by 1.003 (exp(0.003)), holding physical activity constant.
 
-The odds a person who does physical activity will rate themselves as having fair health versus excellent health are expected to be 0.193 (exp(-1.645 )) times the odds for a person who doesn't do physical activity, holding age constant.
+- The odds a person who does physical activity will rate themselves as having fair health versus excellent health are expected to be 0.204 (exp(-1.58)) times the odds for a person who doesn't do physical activity, holding age constant.
 
-### Changing the baseline level
+**Changing the baseline level**:
 
 ```{r}
 NHANES <- NHANES %>% 
@@ -176,6 +281,16 @@ health_m <- multinom(HealthGen ~ Age + PhysActive,
 tidy(health_m, conf.int = TRUE, exponentiate = TRUE)
 ```
 
+## Ordinal Regression
+
+```{r}
+library(MASS)
+
+ordinal_reg <- polr(HealthGen ~ Age + PhysActive, data = NHANES)
+
+tidy(ordinal_reg, conf.int = TRUE, exponentiate = TRUE)
+```
+
 ## Poisson Regression 
 
 ```{r}
@@ -185,58 +300,68 @@ Poisson_r <- glm(SleepHrsNight ~ Age + Gender, data = NHANES, family = "poisson"
 summary(Poisson_r)
 ```
 
-For each additional year older the head of the household is, we expect the mean number in the house to multiply by a factor of 0.995 (exp(-0.0047)).
-
-## Ordinal Regression
-
-```{r}
-library(MASS)
-
-ordinal_reg <- polr(HealthGen ~ Age + PhysActive, 
-                     data = NHANES)
-
-tidy(ordinal_reg, conf.int = TRUE, exponentiate = TRUE)
-```
-
 ## Kaplan Meier Survival Curve Analysis
 
-https://bioconnector.github.io/workshops/r-survival.html
-
 ```{r}
+library(survival)
+library(survminer)
+head(lung, 5)
 ```
 
+```{r}
+time_to_event <- lung$time
+outcome <- lung$status
+predictor <- lung$sex
+
+ggsurvplot(survfit(Surv(time_to_event, outcome) ~ predictor, data = lung), 
+     xlab = "Time", ylab = "Probability of survival", 
+     ylim = c(0, 1), 
+     #risk.table = T,
+     #tables.height = 0.25, 
+     conf.int = T, 
+     censor = F,
+     palette = "nejm",
+     #legend.labs = c("xxx", "yyy"), 
+     legend = "right", 
+     surv.median.line = "v", font.x = 11, font.y = 11,
+     font.tickslab = c(7), 
+     font.legend = 10)
+```
 
 ## Cox Proportional Hazards Regression
 
 ```{r}
+lung <- lung %>%
+  mutate(sex = as.factor(sex))
 
+coxm1 <- coxph(Surv(time, status) ~ age + sex, data = lung)
+
+tidy(coxm1, conf.int = TRUE, conf.level = 0.95, exponentiate = TRUE)
 ```
 
 
-## Summary
+
+## Takeaways
 - Use the right type of model for the right type of data
-- Ensure the variable is encoded properly prior to passing into R
-- Focus on the interpretations of the variables
 
-**Checking the assumption for your regression models**: 
-- 1. Linearity: There is a linear relationship between the response and predictor variable.
-- 2. Constant Variance: The variability of the errors is equal for all values of the predictor variable.
-- 3. Normality: The errors follow a normal distribution.
-- 4. Independence: The errors are independent from each other.
+- Use the appropriate metrics to compare models
 
+- Keep the practical and clinical significance in mind when comparing models
 
-## Other topics
+## Other future topics?
+
 - Data cleaning in R 
+
 - Machine learning
+
 - Github
+
 - Figure making
-- R
-- Python
 
 ## Reference: 
-https://cran.r-project.org/web/packages/NHANES/NHANES.pdf
-https://sta210-fa20.netlify.app
 
-
+- https://cran.r-project.org/web/packages/NHANES/NHANES.pdf
+- https://sta210-fa20.netlify.app
+- https://bioconnector.github.io/workshops/r-survival.html
 
 
