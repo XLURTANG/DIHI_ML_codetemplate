@@ -139,7 +139,7 @@ diag_plot(slr)
 
 
 
-## Multiple Linear Regression - adjusting for confoundings! :)
+## Multiple Linear Regression - adjusting for confoundings!
 
 ```{r}
 # converting a categorical variable to the right type before fitting the model
@@ -167,7 +167,8 @@ summary(mlr)$r.squared
 ```
 
 ```{r}
-mlr2 <- lm(BPSys1 ~ TotChol + Age + Gender + SleepHrsNight + Work + Weight + Height + Pulse, data = NHANES)
+mlr2 <- lm(BPSys1 ~ TotChol + Age + Gender + SleepHrsNight + Work + Weight + 
+             Height + Pulse, data = NHANES)
 summary(mlr2)$r.squared
 summary(mlr2)$adj.r.squared
 ```
@@ -294,19 +295,32 @@ tidy(ordinal_reg, conf.int = TRUE, exponentiate = TRUE)
 ## Poisson Regression 
 
 ```{r}
-Poisson_r <- glm(SleepHrsNight ~ Age + Gender, data = NHANES, family = "poisson")
+Poisson_r <- glm(SleepHrsNight ~ Age + Gender, data = NHANES, 
+                 family = "poisson")
 
 # Print the summary of the Poisson regression model
 summary(Poisson_r)
 ```
 
-## Kaplan Meier Survival Curve Analysis
+## Survival Analysis
+
+**Use case**: time to event data in the presence of censoring
+
+- Not all units are observed until their event times - (i.e. the outcome is not observed for everyone)
+
+- In these cases, observations are said to be censored. We know that they survived until at least their censoring time, but do not know any further information. 
 
 ```{r}
 library(survival)
 library(survminer)
 head(lung, 5)
 ```
+
+**Kaplan Meier Survival Curve Analysi**
+
+The Kaplan Meier estimate is a non-parametric estimation of survival
+
+- Probability of survival beyond time X = Probability of surviving to time X-1 * Probability of surviving at time X
 
 ```{r}
 time_to_event <- lung$time
@@ -328,6 +342,13 @@ ggsurvplot(survfit(Surv(time_to_event, outcome) ~ predictor, data = lung),
      font.legend = 10)
 ```
 
+```{r}
+# log rank test
+survdiff(Surv(time_to_event, outcome) ~ predictor)
+```
+
+Note: If the Kaplan-Meier survival curves cross, then this is clear departure from proportional hazards, and the log rank test should not be used. 
+
 ## Cox Proportional Hazards Regression
 
 ```{r}
@@ -339,6 +360,14 @@ coxm1 <- coxph(Surv(time, status) ~ age + sex, data = lung)
 tidy(coxm1, conf.int = TRUE, conf.level = 0.95, exponentiate = TRUE)
 ```
 
+**Interpretation**:
+
+- Older age is a not significant risk factor for mortality. Each additional years in age is associated with 1% additional hazard for mortality, holding all else constant. 
+
+- Female patients are associated with 41% lower hazard of mortality compared to male patients, after adjusting for age.
+
+A document with more technical details: 
+https://docs.google.com/document/d/1dwgSMnwTl8B-CY-o6ZSrZJCeiIps4Qx3zomIjK6KfZ0/edit?usp=sharing
 
 
 ## Takeaways
@@ -347,6 +376,8 @@ tidy(coxm1, conf.int = TRUE, conf.level = 0.95, exponentiate = TRUE)
 - Use the appropriate metrics to compare models
 
 - Keep the practical and clinical significance in mind when comparing models
+
+- "All models are wrong but some are useful"
 
 ## Other future topics?
 
